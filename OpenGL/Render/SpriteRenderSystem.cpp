@@ -84,6 +84,7 @@ namespace Graphitech {
         }
 
         // Get scale (default to 1.0 if not present)
+        // ScaleComponent is a MULTIPLIER on the base sprite size (32x32)
         float scaleX = scale ? scale->x : 1.0f;
         float scaleY = scale ? scale->y : 1.0f;
 

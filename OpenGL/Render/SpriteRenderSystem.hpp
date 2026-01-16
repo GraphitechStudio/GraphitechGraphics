@@ -75,6 +75,11 @@ namespace Graphitech {
         uint32_t GetLastSpriteCount() const noexcept { return _lastSpriteCount; }
         uint32_t GetLastDrawCallCount() const noexcept { return _batch.GetLastDrawCallCount(); }
 
+        /**
+         * @brief Updates projection matrix for current viewport.
+         */
+        void UpdateProjection(float logicalWidth, float logicalHeight);
+
     private:
         SpriteBatch _batch;
         GLuint _shaderProgram = 0;
@@ -87,11 +92,6 @@ namespace Graphitech {
          */
         bool EntityToSpriteDrawCall(ECS::Scene& scene, ECS::Entity entity, 
                                    SpriteDrawCall& outCall);
-
-        /**
-         * @brief Updates projection matrix for current viewport.
-         */
-        void UpdateProjection(float logicalWidth, float logicalHeight);
     };
 
 } // namespace Graphitech
