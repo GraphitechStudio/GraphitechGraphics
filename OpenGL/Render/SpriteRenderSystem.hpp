@@ -80,10 +80,16 @@ namespace Graphitech {
          */
         void UpdateProjection(float logicalWidth, float logicalHeight);
 
+        /**
+         * @brief Sets the camera offset (e.g. for shake).
+         */
+        void SetCameraOffset(float x, float y) { _cameraOffset = {x, y}; }
+
     private:
         SpriteBatch _batch;
         GLuint _shaderProgram = 0;
         uint32_t _lastSpriteCount = 0;
+        glm::vec2 _cameraOffset = {0.0f, 0.0f};
 
         /**
          * @brief Converts entity data to sprite draw call.

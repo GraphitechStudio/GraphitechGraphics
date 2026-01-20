@@ -51,6 +51,11 @@ namespace Graphitech {
     void SpriteRenderSystem::UpdateProjection(float logicalWidth, float logicalHeight) {
         // Create orthographic projection matrix
         glm::mat4 projection = glm::ortho(0.0f, logicalWidth, logicalHeight, 0.0f, -1.0f, 1.0f);
+        
+        // Apply camera offset (translate projection)
+        if (_cameraOffset.x != 0.0f || _cameraOffset.y != 0.0f) {
+            projection = glm::translate(projection, glm::vec3(_cameraOffset.x, _cameraOffset.y, 0.0f));
+        }
 
         // Set uniform in shader
         glUseProgram(_shaderProgram);
