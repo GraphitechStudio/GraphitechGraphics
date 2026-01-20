@@ -140,7 +140,6 @@ namespace Graphitech {
         // Check cache first
         auto it = _cache.find(path);
         if (it != _cache.end()) {
-            std::cout << "[TextureManager] Cache hit: " << path << "\n";
             return it->second;
         }
 
@@ -169,8 +168,6 @@ namespace Graphitech {
         _cache[path] = texture;
         _memoryUsage += width * height * 4; // Estimate RGBA storage
 
-        std::cout << "[TextureManager] Loaded and cached: " << path 
-                  << " (" << width << "x" << height << ")\n";
         return texture;
     }
 
@@ -192,7 +189,6 @@ namespace Graphitech {
     void TextureManager::ClearCache() {
         _cache.clear();
         _memoryUsage = 0;
-        std::cout << "[TextureManager] Cache cleared\n";
     }
 
 } // namespace Graphitech
