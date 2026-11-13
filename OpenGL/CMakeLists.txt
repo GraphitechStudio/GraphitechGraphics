@@ -46,10 +46,11 @@ elseif(PkgConfig_FOUND)
     endif()
 endif()
 
+find_package(OpenGL REQUIRED)
 # Link system libs used by the project
 target_link_libraries(GraphitechGraphicsOpenGL PUBLIC
-    GL
-    dl
+    OpenGL::GL
+    ${CMAKE_DL_LIBS}
     pthread
 )
 

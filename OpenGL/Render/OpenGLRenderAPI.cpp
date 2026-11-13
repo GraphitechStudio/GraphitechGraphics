@@ -27,11 +27,23 @@ namespace Graphitech {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+#if defined(GRAPHITECH_GL_CORE_PROFILE)
+        if (!InitImmediateEmulation()) {
+            return false;
+        }
+#endif
+
         initialized_ = true;
         return true;
     }
 
     void OpenGLRenderAPI::Shutdown() {
+#if defined(GRAPHITECH_GL_CORE_PROFILE)
+        if (immVbo_) glDeleteBuffers(1, &immVbo_);
+        if (immVao_) glDeleteVertexArrays(1, &immVao_);
+        if (immProgram_) glDeleteProgram(immProgram_);
+        immVbo_ = immVao_ = immProgram_ = 0;
+#endif
         uniformCache_.clear();
         initialized_ = false;
     }
@@ -49,6 +61,17 @@ namespace Graphitech {
     }
 
     void OpenGLRenderAPI::SetOrtho2D(float left, float right, float bottom, float top, float near, float far) {
+#if defined(GRAPHITECH_GL_CORE_PROFILE)
+        // Same matrix as glOrtho, column-major
+        const float m[16] = {
+            2.0f / (right - left), 0.0f, 0.0f, 0.0f,
+            0.0f, 2.0f / (top - bottom), 0.0f, 0.0f,
+            0.0f, 0.0f, -2.0f / (far - near), 0.0f,
+            -(right + left) / (right - left), -(top + bottom) / (top - bottom), -(far + near) / (far - near), 1.0f
+        };
+        for (int i = 0; i < 16; ++i) projection_[i] = m[i];
+        return;
+#endif
         glMatrixMode(GL_PROJECTION);
         glLoadIdentity();
         glOrtho(left, right, bottom, top, near, far);
@@ -69,10 +92,18 @@ namespace Graphitech {
 
     void OpenGLRenderAPI::SetDrawColor(const Color& color) {
         currentColor_ = color;
+#if defined(GRAPHITECH_GL_CORE_PROFILE)
+        return;
+#endif
         glColor4f(color.r, color.g, color.b, color.a);
     }
 
     void OpenGLRenderAPI::SetLineWidth(float width) {
+#if defined(GRAPHITECH_GL_CORE_PROFILE)
+        // Core profile on macOS only supports 1.0 for non-smooth lines
+        (void)width;
+        return;
+#endif
         glLineWidth(width);
     }
 
@@ -98,6 +129,96 @@ namespace Graphitech {
 
     // ============ Drawing Operations ============
 
+#if defined(GRAPHITECH_GL_CORE_PROFILE)
+    bool OpenGLRenderAPI::InitImmediateEmulation() {
+        static const char* vs = R"glsl(
+            #version 330 core
+            layout (location = 0) in vec3 aPos;
+            layout (location = 1) in vec2 aUV;
+            layout (location = 2) in vec4 aColor;
+            uniform mat4 uProjection;
+            out vec2 vUV;
+            out vec4 vColor;
+            void main() {
+                gl_Position = uProjection * vec4(aPos, 1.0);
+                vUV = aUV;
+                vColor = aColor;
+            }
+        )glsl";
+        static const char* fs = R"glsl(
+            #version 330 core
+            in vec2 vUV;
+            in vec4 vColor;
+            out vec4 FragColor;
+            uniform sampler2D uTexture;
+            uniform bool uUseTexture;
+            void main() {
+                FragColor = uUseTexture ? texture(uTexture, vUV) * vColor : vColor;
+            }
+        )glsl";
+        immProgram_ = CreateShaderProgram(vs, fs);
+        if (!immProgram_) {
+            return false;
+        }
+        glGenVertexArrays(1, &immVao_);
+        glGenBuffers(1, &immVbo_);
+        glBindVertexArray(immVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, immVbo_);
+        const GLsizei stride = 9 * sizeof(float);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, (void*)0);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, stride, (void*)(3 * sizeof(float)));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, stride, (void*)(5 * sizeof(float)));
+        glBindVertexArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        return true;
+    }
+
+    void OpenGLRenderAPI::BeginDraw(PrimitiveType type) {
+        immPrimitive_ = ToGLPrimitive(type);
+        immVertices_.clear();
+        immHasTexCoord_ = false;
+    }
+
+    void OpenGLRenderAPI::EndDraw() {
+        if (immVertices_.empty() || !immProgram_) {
+            return;
+        }
+        GLint prevProgram = 0, prevVao = 0, prevBuffer = 0;
+        glGetIntegerv(GL_CURRENT_PROGRAM, &prevProgram);
+        glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &prevVao);
+        glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &prevBuffer);
+
+        glUseProgram(immProgram_);
+        SetUniformMat4(immProgram_, "uProjection", projection_);
+        SetUniformInt(immProgram_, "uTexture", 0);
+        SetUniformInt(immProgram_, "uUseTexture", immHasTexCoord_ ? 1 : 0);
+        glBindVertexArray(immVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, immVbo_);
+        glBufferData(GL_ARRAY_BUFFER, immVertices_.size() * sizeof(float), immVertices_.data(), GL_STREAM_DRAW);
+        glDrawArrays(immPrimitive_, 0, static_cast<GLsizei>(immVertices_.size() / 9));
+
+        glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(prevBuffer));
+        glBindVertexArray(static_cast<GLuint>(prevVao));
+        glUseProgram(static_cast<GLuint>(prevProgram));
+        immVertices_.clear();
+    }
+
+    void OpenGLRenderAPI::Vertex(float x, float y, float z) {
+        immVertices_.insert(immVertices_.end(), {
+            x, y, z, immU_, immV_,
+            currentColor_.r, currentColor_.g, currentColor_.b, currentColor_.a
+        });
+    }
+
+    void OpenGLRenderAPI::TexCoord(float u, float v) {
+        immU_ = u;
+        immV_ = v;
+        immHasTexCoord_ = true;
+    }
+#else
     void OpenGLRenderAPI::BeginDraw(PrimitiveType type) {
         glBegin(ToGLPrimitive(type));
     }
@@ -113,6 +234,7 @@ namespace Graphitech {
     void OpenGLRenderAPI::TexCoord(float u, float v) {
         glTexCoord2f(u, v);
     }
+#endif
 
     void OpenGLRenderAPI::DrawElements(PrimitiveType type, int count, uint32_t indexType, const void* indices) {
         glDrawElements(ToGLPrimitive(type), count, indexType, indices);

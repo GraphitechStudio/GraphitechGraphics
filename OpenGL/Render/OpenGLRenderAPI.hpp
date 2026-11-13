@@ -12,6 +12,13 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <unordered_map>
+#include <vector>
+
+// macOS only offers OpenGL core profiles (3.2+) without the fixed-function
+// pipeline, so immediate-mode drawing is emulated with a small shader there.
+#if defined(__APPLE__)
+#define GRAPHITECH_GL_CORE_PROFILE 1
+#endif
 
 namespace Graphitech {
 
@@ -108,6 +115,17 @@ namespace Graphitech {
          * @brief Whether the API has been initialized.
          */
         bool initialized_ = false;
+
+#if defined(GRAPHITECH_GL_CORE_PROFILE)
+        // Immediate-mode emulation (core profile)
+        bool InitImmediateEmulation();
+        float projection_[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+        std::vector<float> immVertices_;   // x, y, z, u, v, r, g, b, a
+        GLenum immPrimitive_ = GL_TRIANGLES;
+        bool immHasTexCoord_ = false;
+        float immU_ = 0.0f, immV_ = 0.0f;
+        GLuint immProgram_ = 0, immVao_ = 0, immVbo_ = 0;
+#endif
     };
 
 } // namespace Graphitech
