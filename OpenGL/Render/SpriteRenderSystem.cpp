@@ -88,6 +88,13 @@ namespace Graphitech {
             return false;
         }
 
+        // Only textured entities are sprites. Entities with just a position
+        // (stars, primitives, pickups) are drawn by the primitive pass; batching
+        // them here drew untextured quads with whatever texture was bound last.
+        if (!tex || tex->texturePath.empty()) {
+            return false;
+        }
+
         // Get scale (default to 1.0 if not present)
         // ScaleComponent is a MULTIPLIER on the base sprite size (32x32)
         float scaleX = scale ? scale->x : 1.0f;
@@ -133,6 +140,9 @@ namespace Graphitech {
             if (texture) {
                 outCall.textureId = texture->GetHandle();
             }
+        }
+        if (outCall.textureId == 0) {
+            return false; // texture failed to load: skip instead of drawing a wrong one
         }
 
         // Set z-order from rotation component or default
